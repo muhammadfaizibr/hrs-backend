@@ -69,6 +69,7 @@ class User(AbstractBaseUser):
 
 
 class Place(models.Model):
+    
     PLACE_TYPES = [
         ('hotel', 'Hotel'),
         ('attraction', 'Attraction'),
@@ -90,10 +91,12 @@ class Place(models.Model):
     phone = models.CharField(max_length=15, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     description = models.TextField(blank=True, null=True)
+    title = models.TextField(blank=True, null=True)
     combined_amenities = models.TextField(blank=True, null=True)
     rating = models.FloatField(default=0.0, blank=True, null=True)
     number_of_reviews = models.PositiveIntegerField(default=0, blank=True, null=True)
     category = models.CharField(max_length=100, blank=True, null=True)
+    city = models.CharField(max_length=100, blank=True, null=True)
     ranking = models.CharField(max_length=55, blank=True, null=True)
     subcategories = models.TextField(blank=True, null=True)  
 

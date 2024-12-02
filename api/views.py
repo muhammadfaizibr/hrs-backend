@@ -8,6 +8,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import pagination
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.response import Response
+from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
+from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.response import Response
+from api.utils.main import main
+import pandas as pd
 
 def get_tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
@@ -71,8 +78,8 @@ class UserProfileView(APIView):
 
 class PlaceListCreateView(ListCreateAPIView):
     renderer_classes = [CustomRenderer]
-    serializer_class = serializersPlaceSerializer
-    queryset = modelsPlace.objects.all().order_by('-id')
+    serializer_class = serializers.PlaceSerializer
+    queryset = models.Place.objects.all().order_by('-id')
     pagination_class = PageNumberPagination
 
 
@@ -98,3 +105,30 @@ class CustomPagePagination(pagination.PageNumberPagination):
     page_size_query_param = 'pagesize'
     max_page_size = 80
 
+
+
+llm = ChatGroq(model_name="mixtral-8x7b-32768", temperature=0.7, groq_api_key="YOUR_GROQ_API_KEY")
+
+system_prompt = (
+    "You are a professional assistant that provides concise, engaging, and recommendation-focused attraction descriptions."
+)
+human_prompt = (
+    "{name} in {city}, located at {address}, is highly recommended for its subcategory of {subcategories}. "
+    "With a rating of {rating}/5.0 and ranked {ranking}, it stands out as a must-visit destination. {description} "
+    "This attraction is praised for its unique features, making it an excellent option for travelers."
+)
+prompt = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", human_prompt)])
+
+
+
+class RecommendAttractionsView(APIView):
+    def get(self, request):
+        query_title = request.query_params.get("title", "")
+        query_city = request.query_params.get("city", "")
+        query_subcategories = request.query_params.get("subcategories", "")
+        queryset = models.Place.objects.all()
+    
+        df_attractions = pd.DataFrame(list(queryset.values()))
+        recommendations = main(df_attractions, query_title, query_city, query_subcategories)
+        
+        return Response({'results': recommendations})

@@ -8,7 +8,6 @@ def rename_columns(file_name):
     attractions_columns = {
         'Attraction_Name': 'name',
         'publishedAt': 'published_date',
-        'preprocessed_title': 'title',
         'city': 'city',
         'id': 'id',
         'email': 'contact_email',
@@ -27,7 +26,6 @@ def rename_columns(file_name):
     hotels_columns = {
         'Hotel_Name': 'name',
         'publishedAt': 'published_date',
-        'preprocessed_title': 'title',
         'City': 'city',
         'subcategories': 'subcategories',
         'Description': 'description',
@@ -46,6 +44,7 @@ def rename_columns(file_name):
     file_path = Path(settings.BASE_DIR) / 'static/datasets' / file_name
     df = pd.read_csv(file_path, encoding="ISO-8859-1")
     
+    df.drop(columns=['description'], inplace=True)
     if file_name == "hotels_data.csv":
         df = df.rename(columns=hotels_columns)
     elif file_name == "attractions_data.csv":
@@ -81,6 +80,8 @@ class Command(BaseCommand):
                             email=row['contact_email'],
                             phone=row['contact_phone'],
                             address=row['address'],
+                            city=row['city'],
+                            title=row['preprocessed_title'],
                             description=row['description'],
                             rating=row['rating'],
                             number_of_reviews=row['review_count'],
@@ -99,6 +100,8 @@ class Command(BaseCommand):
                             email=row['contact_email'],
                             phone=row['contact_phone'],
                             address=row['address'],
+                            city=row['city'],
+                            title=row['preprocessed_title'],
                             description=row['description'],
                             rating=row['rating'],
                             number_of_reviews=row['review_count'],
