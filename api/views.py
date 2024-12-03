@@ -88,7 +88,7 @@ class PlaceFilter(filters.FilterSet):
 
     class Meta:
         model = Place
-        fields = ["rating", "number_of_reviews", "name", "amenities",]
+        fields = ["rating", "number_of_reviews", "name", "amenities", "city",]
         filter_overrides = {
             models.ImageField: {
                 "filter_class": filters.CharFilter,
