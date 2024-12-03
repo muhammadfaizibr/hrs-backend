@@ -22,14 +22,10 @@ def get_recommendations(query_title, query_city, query_amenities,query_subcatego
     city_sim_scores = scaler.fit_transform(city_sim_scores.reshape(-1, 1)).flatten()
     subcategories_sim_scores = scaler.fit_transform(subcategories_sim_scores.reshape(-1, 1)).flatten()
     
-    print(len(title_sim_scores), len(city_sim_scores), len(subcategories_sim_scores), len(df))
-    
-    
-
     if place_type == "hotel":
         amenities_sim_scores = cosine_similarity(query_vector_amenities, tfidf_matrix_amenities).flatten()
         amenities_sim_scores = scaler.fit_transform(amenities_sim_scores.reshape(-1, 1)).flatten() 
-        
+
         df['similarity_score'] = (
             0.3 * title_sim_scores +
             0.3 * city_sim_scores +

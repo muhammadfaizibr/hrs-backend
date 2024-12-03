@@ -91,7 +91,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 class PlaceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Place
-        fields = '__all_'
+        fields = '__all__'
 
 
 

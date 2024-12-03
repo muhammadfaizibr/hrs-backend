@@ -64,9 +64,8 @@ def load_or_generate_tfidf_models(df, place_type):
         tfidf_title = joblib.load(tfidf_title_path)
         tfidf_city = joblib.load(tfidf_city_path)
         
-        tfidf_amenities = joblib.load(tfidf_amenities_path)  
-        if place_type == "hotel":
-            tfidf_matrix_amenities = joblib.load(tfidf_matrix_amenities_path)
+        tfidf_amenities = joblib.load(tfidf_amenities_path) if place_type == "hotel" else "" 
+        tfidf_matrix_amenities = joblib.load(tfidf_matrix_amenities_path) if place_type == "hotel" else "" 
 
         tfidf_subcategories = joblib.load(tfidf_subcategories_path)
         tfidf_matrix_title = joblib.load(tfidf_matrix_title_path)

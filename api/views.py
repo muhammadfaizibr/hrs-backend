@@ -1,7 +1,8 @@
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
-from api import serializers, models
+from api.serializers import UserSerializer, UserRegistrationSerializer, UserLoginSerializer, UserProfileSerializer, PlaceSerializer, ReviewSerializer, RecommendationSerializer
+from api.models import User, Place, Review
 from django.contrib.auth import authenticate
 from api.renderers import CustomRenderer
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -15,6 +16,9 @@ from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIV
 from rest_framework.response import Response
 from api.utils.main import main
 import pandas as pd
+from django_filters import rest_framework as filters
+from django_filters.rest_framework import DjangoFilterBackend
+from django.db import models
 
 def get_tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
@@ -29,7 +33,7 @@ class UserRegistrationView(APIView):
     renderer_classes = [CustomRenderer]
 
     def post(self, request, format=None):
-        serializer = serializers.UserRegistrationSerializer(data=request.data)
+        serializer = UserRegistrationSerializer(data=request.data)
 
         if (serializer.is_valid(raise_exception=True)):
             user = serializer.save()
@@ -43,7 +47,7 @@ class UserLoginView(APIView):
     renderer_classes = [CustomRenderer]
 
     def post(self, request, format=None):
-        serializer = serializers.UserLoginSerializer(data=request.data)
+        serializer = UserLoginSerializer(data=request.data)
         if serializer.is_valid(raise_exception=True):
             email = (serializer.data.get('email')).lower()
             password = serializer.data.get('password')
@@ -60,50 +64,79 @@ class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, format=None):
-        serializer = serializers.UserProfileSerializer(request.user)
+        serializer = UserProfileSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def patch(self, request, format=None):
-        current_user = models.User.objects.get(email=request.user.email)
-        serializer = serializers.UpdateUserProfileSerializer(
+        current_user = User.objects.get(email=request.user.email)
+        serializer = UpdateUserProfileSerializer(
             current_user, data=request.data, partial=True)
         if serializer.is_valid(raise_exception=True):
             serializer.save()
             return Response({'message': 'Profile has been updated!', 'name': request.data['name'], 'email': request.user.email}, status=status.HTTP_200_OK)
     
     def delete(self, request, format=None):
-        models.User.objects.get(email=request.user.email).delete()
+        User.objects.get(email=request.user.email).delete()
         return Response({'message': 'Account has been deleted!'},  status=status.HTTP_200_OK)
+class PlaceFilter(filters.FilterSet):
+    min_rating = filters.NumberFilter(field_name="rating", lookup_expr="gte")
+    max_rating = filters.NumberFilter(field_name="rating", lookup_expr="lte")
+    min_reviews = filters.NumberFilter(field_name="number_of_reviews", lookup_expr="gte")
+    max_reviews = filters.NumberFilter(field_name="number_of_reviews", lookup_expr="lte")
+    query = filters.CharFilter(method="filter_by_query")
+    amenities = filters.CharFilter(method="filter_by_amenities")
 
+    class Meta:
+        model = Place
+        fields = ["rating", "number_of_reviews", "name", "amenities",]
+        filter_overrides = {
+            models.ImageField: {
+                "filter_class": filters.CharFilter,
+            },
+        }
+
+    def filter_by_query(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(
+            models.Q(name__icontains=value)
+            | models.Q(city__icontains=value)
+            | models.Q(subcategories__icontains=value)
+        )
+
+    def filter_by_amenities(self, queryset, name, value):
+        if not value:
+            return queryset
+        amenities_list = [amenity.strip() for amenity in value.split(",") if amenity.strip()]
+        for amenity in amenities_list:
+            queryset = queryset.filter(amenities__icontains=amenity)
+        return queryset  
 
 class PlaceListCreateView(ListCreateAPIView):
-    renderer_classes = [CustomRenderer]
-    serializer_class = serializers.PlaceSerializer
-    queryset = models.Place.objects.all().order_by('-id')
-    pagination_class = PageNumberPagination
-
+    # renderer_classes = [CustomRenderer]
+    serializer_class = PlaceSerializer
+    queryset = Place.objects.all().order_by('-id')
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = PlaceFilter
 
 class PlaceRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     renderer_classes = [CustomRenderer]
-    serializer_class = serializers.PlaceSerializer
-    queryset = models.Place.objects.all().order_by('-id')
+    serializer_class = PlaceSerializer
+    queryset = Place.objects.all().order_by('-id')
 
     
 class ReviewListCreateView(ListCreateAPIView):
     renderer_classes = [CustomRenderer]
-    serializer_class = serializers.ReviewSerializer
-    queryset = models.Review.objects.all().order_by('-id')
+    serializer_class = ReviewSerializer
+    queryset = Review.objects.all().order_by('-id')
     pagination_class = PageNumberPagination
+    filterset_fields = ['user', 'place']
 
 class ReviewRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     renderer_classes = [CustomRenderer]
-    serializer_class = serializers.ReviewSerializer
-    queryset = models.Review.objects.all().order_by('-id')
+    serializer_class = ReviewSerializer
+    queryset = Review.objects.all().order_by('-id')
 
-class CustomPagePagination(pagination.PageNumberPagination):
-    page_size = 40
-    page_size_query_param = 'pagesize'
-    max_page_size = 80
 
 
 
@@ -125,10 +158,10 @@ class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, format=None):
-        serializer = serializers.UserProfileSerializer(request.user)
+        serializer = UserProfileSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-class RecommendAttractionsView(APIView):
+class RecommendationView(APIView):
     def get(self, request):
         title = request.query_params.get("title", "Best hotels")
         amenities = request.query_params.get("amenities", "")
@@ -136,11 +169,10 @@ class RecommendAttractionsView(APIView):
         subcategories = request.query_params.get("subcategories", "Hotel")
         place_type = request.query_params.get("place_type", "all")
 
-        queryset = models.Place.objects.all()
+        queryset = Place.objects.all()
         if place_type != "all":
-            queryset =  models.Place.objects.filter(place_type=place_type)
+            queryset =  Place.objects.filter(place_type=place_type)
 
-        print(title, city, subcategories)
     
         df = pd.DataFrame(list(queryset.values()))
         recommendations = main(df, title, amenities, city, subcategories, place_type)
