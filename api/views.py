@@ -72,7 +72,7 @@ class UserProfileView(APIView):
             return Response({'message': 'Profile has been updated!', 'name': request.data['name'], 'email': request.user.email}, status=status.HTTP_200_OK)
     
     def delete(self, request, format=None):
-        current_user = models.User.objects.get(email=request.user.email).delete()
+        models.User.objects.get(email=request.user.email).delete()
         return Response({'message': 'Account has been deleted!'},  status=status.HTTP_200_OK)
 
 
@@ -120,15 +120,29 @@ human_prompt = (
 prompt = ChatPromptTemplate.from_messages([("system", system_prompt), ("human", human_prompt)])
 
 
+class UserProfileView(APIView):
+    renderer_classes = [CustomRenderer]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, format=None):
+        serializer = serializers.UserProfileSerializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 class RecommendAttractionsView(APIView):
     def get(self, request):
-        query_title = request.query_params.get("title", "")
-        query_city = request.query_params.get("city", "")
-        query_subcategories = request.query_params.get("subcategories", "")
+        title = request.query_params.get("title", "Best hotels")
+        amenities = request.query_params.get("amenities", "")
+        city = request.query_params.get("city", "karachi")
+        subcategories = request.query_params.get("subcategories", "Hotel")
+        place_type = request.query_params.get("place_type", "all")
+
         queryset = models.Place.objects.all()
+        if place_type != "all":
+            queryset =  models.Place.objects.filter(place_type=place_type)
+
+        print(title, city, subcategories)
     
-        df_attractions = pd.DataFrame(list(queryset.values()))
-        recommendations = main(df_attractions, query_title, query_city, query_subcategories)
+        df = pd.DataFrame(list(queryset.values()))
+        recommendations = main(df, title, amenities, city, subcategories, place_type)
         
         return Response({'results': recommendations})

@@ -1,12 +1,13 @@
-def generate_description(llm, prompt, attraction_data):
+def generate_description(llm, prompt, df, place_type):
     input_data = {
-        "name": attraction_data["name"],
-        "city": attraction_data["city"],
-        "rating": attraction_data["rating"],
-        "ranking": attraction_data["ranking"],
-        "address": attraction_data["address"],
-        "description": attraction_data["description"],
-        "subcategories": attraction_data["subcategories"],
+        "name": df["name"],
+        "city": df["city"],
+        "rating": df["rating"],
+        "ranking": df["ranking"],
+        "address": df["address"],
+        "description": df["description"],
+        "subcategories": df["subcategories"],
+        "amenities": ", ".join(df["combined_amenities"].split(", ")) if place_type == "hotel" else [""],
     }
     
     chain = prompt | llm
