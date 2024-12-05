@@ -20,6 +20,8 @@ import pandas as pd
 from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import models
+from rest_framework.filters import OrderingFilter
+
 
 
 def get_tokens_for_user(user):
@@ -42,7 +44,7 @@ class UserRegistrationView(APIView):
             token = get_tokens_for_user(user)
             return Response({'token': token, 'message': 'Registation Success!'}, status=status.HTTP_201_CREATED)
 
-        return Response(serializers.error, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.error, status=status.HTTP_400_BAD_REQUEST)
 
 
 class UserLoginView(APIView):
@@ -58,7 +60,7 @@ class UserLoginView(APIView):
 
             return Response({'token': token, 'message': 'Login Success!'}, status=status.HTTP_200_OK)
         
-        return Response(serializers.error, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.error, status=status.HTTP_400_BAD_REQUEST)
 
 
 class UserProfileView(APIView):
@@ -80,6 +82,7 @@ class UserProfileView(APIView):
     def delete(self, request, format=None):
         User.objects.get(email=request.user.email).delete()
         return Response({'message': 'Account has been deleted!'},  status=status.HTTP_200_OK)
+    
 class PlaceFilter(filters.FilterSet):
     min_rating = filters.NumberFilter(field_name="rating", lookup_expr="gte")
     max_rating = filters.NumberFilter(field_name="rating", lookup_expr="lte")
@@ -115,11 +118,14 @@ class PlaceFilter(filters.FilterSet):
         return queryset  
 
 class PlaceListCreateView(ListCreateAPIView):
-    renderer_classes = [CustomRenderer]
+    # renderer_classes = [CustomRenderer]
     serializer_class = PlaceSerializer
     queryset = Place.objects.all().order_by('-id')
-    filter_backends = [DjangoFilterBackend]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_class = PlaceFilter
+    ordering_fields = ['number_of_reviews', 'rating', 'name']
+    ordering = ['-number_of_reviews']
+
 
 class PlaceRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     renderer_classes = [CustomRenderer]
@@ -174,13 +180,13 @@ class RecommendationView(APIView):
         amenities = request.query_params.get("amenities", "")
         city = request.query_params.get("city", "karachi")
         subcategories = request.query_params.get("subcategories", "Hotel")
-        place_type = request.query_params.get("place_type", "")
-        print('place_type', place_type)
+        place_type = request.query_params.get("type", "")
+        related = request.query_params.get("related", False)
         queryset = Place.objects.filter(place_type=place_type) if place_type not in ["all", ""] else Place.objects.all()
 
         df = pd.DataFrame(list(queryset.values()))
-        description, results = main(df, title, amenities, city, subcategories, place_type)
-
+        description, results = main(df, title, amenities, city, subcategories, place_type, related)
+        print(description)
         return Response({
             'description': description, 
             'results': results.to_dict(orient='records') if not results.empty else []
@@ -191,10 +197,15 @@ class RecommendationView(APIView):
 class CollabrativeRecommendationView(APIView):
     def get(self, request):
         user = request.query_params.get("user", "")
-        if user:
-            recommended_places = recommend_places(user, Review, Place)
+        try:
+            if user:
+                user = User.objects.get(id=user) 
+                recommended_places = recommend_places(user, Review, Place)
 
-            serializer = PlaceSerializer(recommended_places, many=True)
-            return Response({"results": serializer.data })
-        else:
+                serializer = PlaceSerializer(recommended_places, many=True)
+                return Response({"results": serializer.data })
+            else:
+                return Response({"results": [] })
+            
+        except: 
             return Response({"results": [] })

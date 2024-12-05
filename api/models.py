@@ -5,6 +5,9 @@ from django.core.exceptions import ValidationError
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 import os
+from django.db.models.signals import pre_save
+import pickle
+
 class UserManager(BaseUserManager):
     def create_user(self, email, username, password=None, cofirm_password=None):
         """
@@ -160,3 +163,20 @@ def delete_all_files_in_folder(folder_path):
 def place_post_save(sender, instance, created, **kwargs):
     if created:
         delete_all_files_in_folder("models")
+
+
+@receiver(post_save, sender=Review)
+def update_place_rating(sender, instance, **kwargs):
+    # # filename='sentiment-trained-model.sav'
+    # # loaded_model=pickle.load(open('sentiment-trained-model.sav','rb'))
+    # preprocessed_new_comments = [instance.review_text]
+
+    # vectorizer.transform(preprocessed_new_comments)
+    place = instance.place
+
+    total_reviews = place.number_of_reviews + 1
+    new_rating = ((place.rating * place.number_of_reviews) + instance.rating) / total_reviews
+
+    place.rating = new_rating
+    place.number_of_reviews = total_reviews
+    place.save()

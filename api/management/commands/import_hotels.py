@@ -91,7 +91,6 @@ class Command(BaseCommand):
                             published_at=row['published_date'],
                         )
                     else:
-                        print(row['amenities'])
                         Place.objects.create(
                             user=User.objects.get(id=1),
                             name=row['name'],

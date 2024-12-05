@@ -7,7 +7,9 @@ import random
 
 class Command(BaseCommand):
     def handle(self, *args, **kwargs):
-        file_names = ['hotels_data.csv', 'attractions_data.csv']
+        # file_names = ['attractions_with_reviews.csv']
+        file_names = ['hotels_with_reviews.csv']
+        # file_names = ['hotels_data.csv', 'attractions_data.csv']
         
         for file_name in file_names:
             file_path = Path(settings.BASE_DIR) / 'static/datasets' / file_name
@@ -17,15 +19,20 @@ class Command(BaseCommand):
 
             print(df.shape)
 
-
+            i = 1
             for _, row in df.iterrows():
-                if not Review.objects.filter(user=User.objects.get(email=f"{row['author'][1:]}@gmail.com"), place=Place.objects.get(name=row['Hotel_Name'] if file_name == 'hotels_data.csv' else row['Attraction_Name']),    ).exists():
+                # if not Review.objects.filter(user=User.objects.get(email=f"{row['author'][1:]}@gmail.com"), place=Place.objects.get(name=row['Hotel_Name'] if file_name == 'hotels_with_reviews.csv' else row['Attraction_Name']),    ).exists():
+                try:
+                    place = Place.objects.get(name=row['Hotel_Name']) if file_name == 'hotels_with_reviews.csv' else row['Attraction_Name']
+
                     Review.objects.create(
                         user=User.objects.get(email=f"{row['author'][1:]}@gmail.com"),   
-                        place=Place.objects.get(name=row['Hotel_Name'] if file_name == 'hotels_data.csv' else row['Attraction_Name']),     
+                        place=Place.objects.get(name=row['Hotel_Name'] if file_name == 'hotels_with_reviews.csv' else row['Attraction_Name']),     
                         rating=row['predicted_rating'],
-                        review_text=row['preprocessed_comment'],
+                        review_text=row['Reviews'],
                         sentiment=row['sentiment'].lower(),
                     )
-
+                except Exception as e:
+                    i + 1
+            print("failed: ", i)
             print(f"Review Imported of {file_name}!")

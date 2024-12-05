@@ -6,7 +6,7 @@ def get_recommendations(query_title, query_city, query_amenities,query_subcatego
                         tfidf_title, tfidf_amenities,tfidf_city, tfidf_subcategories, 
                         tfidf_matrix_title, tfidf_matrix_amenities,
                         tfidf_matrix_city, tfidf_matrix_subcategories, df, 
-                        # llm, prompt,
+                        llm, prompt,
                          related, place_type):
     query_vector_title = tfidf_title.transform([query_title])
     query_vector_amenities = tfidf_amenities.transform([query_amenities]) if place_type == "hotel" else None
@@ -47,16 +47,14 @@ def get_recommendations(query_title, query_city, query_amenities,query_subcatego
         0.1 * df['normalized_ranking']
     )
     
-    top_results = df.nlargest(40, 'final_score')
+    top_results = df.nlargest(10, 'final_score')
     if place_type == "hotel":
         remaining = top_results.iloc[:][['place_type', 'name', 'id','city', 'image_url','address','subcategories', 'rating', 'ranking', 'combined_amenities']]
     else:
         remaining = top_results.iloc[:][['place_type', 'name', 'id','city', 'image_url','address','subcategories', 'rating', 'ranking']]
 
-    if not related:
-        # description = generate_description(llm, prompt, top_results.iloc[0], place_type)
-        description = "lorem ipsum"
-        return description, remaining
+    description = generate_description(llm, prompt, top_results.iloc[0], place_type) if not related else ""
+        # description = "lorem ipsum"
+    return description, remaining
 
-    return remaining
     

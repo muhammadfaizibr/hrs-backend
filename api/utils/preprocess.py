@@ -11,7 +11,6 @@ def preprocess_data(dataset, place_type):
     df = dataset 
     # file_path = Path(settings.BASE_DIR) / 'static/datasets' / "attractions_data.csv"
     # df = pd.read_csv(file_path, encoding = "ISO-8859-1")
-    # print(dataset)
     # df = df.rename(columns={"Attraction_Name": 'name'})
     df.columns = df.columns.str.lower()
     df.drop_duplicates(subset=['name'], inplace=True)

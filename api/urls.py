@@ -13,10 +13,10 @@ router = DefaultRouter()
 urlpatterns = [
     path('recommendations/', RecommendationView.as_view(), name='recommendations'),
     path('place-list-create/', PlaceListCreateView.as_view()),
-    path('place-retrieve-update-destroy/<int:pk>', PlaceRetrieveUpdateDestroyView.as_view()),
+    path('place-retrieve-update-destroy/<int:pk>/', PlaceRetrieveUpdateDestroyView.as_view()),
     path('review-list/', ReviewListView.as_view()),
     path('review-create/', ReviewCreateView.as_view()),
-    path('review-retrieve-update-destroy/<int:pk>', ReviewRetrieveUpdateDestroyView.as_view()),
+    path('review-retrieve-update-destroy/<int:pk>/', ReviewRetrieveUpdateDestroyView.as_view()),
     path('user/register/', views.UserRegistrationView.as_view()),
     path('user/login/', views.UserLoginView.as_view()),
     path('user/profile/', views.UserProfileView.as_view()),
