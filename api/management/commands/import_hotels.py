@@ -74,7 +74,7 @@ class Command(BaseCommand):
                             user=User.objects.get(id=1),
                             name=row['name'],
                             location=row['location'],
-                            place_type="hotel" if file_name == "hotels_data.csv" else "attraction",
+                            place_type="attraction",
                             is_image_file=False,
                             image_url=row['image_url'],
                             email=row['contact_email'],
@@ -91,10 +91,11 @@ class Command(BaseCommand):
                             published_at=row['published_date'],
                         )
                     else:
+                        print(row['amenities'])
                         Place.objects.create(
                             user=User.objects.get(id=1),
                             name=row['name'],
-                            place_type="hotel" if file_name == "hotels_data.csv" else "attraction",
+                            place_type="hotel",
                             is_image_file=False,
                             image_url=row['image_url'],
                             email=row['contact_email'],
@@ -109,7 +110,7 @@ class Command(BaseCommand):
                             ranking=row['ranking'],
                             subcategories=row['subcategories'],
                             published_at=row['published_date'],
-                            combined_amenities=row['amenities'] if file_name == "hotels_data.csv" else None,
+                            combined_amenities=row['amenities'],
                         )
 
 

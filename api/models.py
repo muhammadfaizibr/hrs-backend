@@ -2,7 +2,9 @@ import datetime
 from django.db import models
 from django.contrib.auth.models import BaseUserManager, AbstractBaseUser
 from django.core.exceptions import ValidationError
-
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+import os
 class UserManager(BaseUserManager):
     def create_user(self, email, username, password=None, cofirm_password=None):
         """
@@ -137,3 +139,24 @@ class Review(models.Model):
 
     def __str__(self):
         return f"Review by {self.user.username} for {self.place.name}"
+
+
+def delete_all_files_in_folder(folder_path):
+    try:
+        if not os.path.exists(folder_path):
+            return
+        
+        for file_name in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, file_name)
+            
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        
+    
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+@receiver(post_save, sender=Place)
+def place_post_save(sender, instance, created, **kwargs):
+    if created:
+        delete_all_files_in_folder("models")

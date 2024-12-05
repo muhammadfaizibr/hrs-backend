@@ -1,7 +1,7 @@
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
-from api.serializers import UserSerializer, UserRegistrationSerializer, UserLoginSerializer, UserProfileSerializer, PlaceSerializer, ReviewSerializer, RecommendationSerializer
+from api.serializers import UserSerializer, UserRegistrationSerializer, UserLoginSerializer, UserProfileSerializer, PlaceSerializer, ReviewSerializerForList, ReviewSerializerForCreate, RecommendationSerializer
 from api.models import User, Place, Review
 from django.contrib.auth import authenticate
 from api.renderers import CustomRenderer
@@ -15,10 +15,12 @@ from langchain_core.prompts import ChatPromptTemplate
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.response import Response
 from api.utils.main import main
+from api.utils.collaborative_filtering import recommend_places
 import pandas as pd
 from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import models
+
 
 def get_tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
@@ -67,13 +69,13 @@ class UserProfileView(APIView):
         serializer = UserProfileSerializer(request.user)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    def patch(self, request, format=None):
-        current_user = User.objects.get(email=request.user.email)
-        serializer = UpdateUserProfileSerializer(
-            current_user, data=request.data, partial=True)
-        if serializer.is_valid(raise_exception=True):
-            serializer.save()
-            return Response({'message': 'Profile has been updated!', 'name': request.data['name'], 'email': request.user.email}, status=status.HTTP_200_OK)
+    # def patch(self, request, format=None):
+    #     current_user = User.objects.get(email=request.user.email)
+    #     serializer = UpdateUserProfileSerializer(
+    #         current_user, data=request.data, partial=True)
+    #     if serializer.is_valid(raise_exception=True):
+    #         serializer.save()
+    #         return Response({'message': 'Profile has been updated!', 'name': request.data['name'], 'email': request.user.email}, status=status.HTTP_200_OK)
     
     def delete(self, request, format=None):
         User.objects.get(email=request.user.email).delete()
@@ -88,7 +90,7 @@ class PlaceFilter(filters.FilterSet):
 
     class Meta:
         model = Place
-        fields = ["rating", "number_of_reviews", "name", "amenities", "city",]
+        fields = ["rating", "number_of_reviews", "name", "combined_amenities", "city", "place_type", "category", "subcategories"]
         filter_overrides = {
             models.ImageField: {
                 "filter_class": filters.CharFilter,
@@ -113,7 +115,7 @@ class PlaceFilter(filters.FilterSet):
         return queryset  
 
 class PlaceListCreateView(ListCreateAPIView):
-    # renderer_classes = [CustomRenderer]
+    renderer_classes = [CustomRenderer]
     serializer_class = PlaceSerializer
     queryset = Place.objects.all().order_by('-id')
     filter_backends = [DjangoFilterBackend]
@@ -125,19 +127,24 @@ class PlaceRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     queryset = Place.objects.all().order_by('-id')
 
     
-class ReviewListCreateView(ListCreateAPIView):
+class ReviewListView(ListCreateAPIView):
     renderer_classes = [CustomRenderer]
-    serializer_class = ReviewSerializer
+    serializer_class = ReviewSerializerForList
     queryset = Review.objects.all().order_by('-id')
-    pagination_class = PageNumberPagination
-    filterset_fields = ['user', 'place']
+    filterset_fields = ['user', 'place',]
+    filter_backends = [DjangoFilterBackend] 
+
+class ReviewCreateView(ListCreateAPIView):
+    renderer_classes = [CustomRenderer]
+    serializer_class = ReviewSerializerForCreate
+    queryset = Review.objects.all().order_by('-id')
+    filterset_fields = ['user', 'place',]
+    filter_backends = [DjangoFilterBackend] 
 
 class ReviewRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     renderer_classes = [CustomRenderer]
-    serializer_class = ReviewSerializer
+    serializer_class = ReviewSerializerForList
     queryset = Review.objects.all().order_by('-id')
-
-
 
 
 llm = ChatGroq(model_name="mixtral-8x7b-32768", temperature=0.7, groq_api_key="YOUR_GROQ_API_KEY")
@@ -163,18 +170,31 @@ class UserProfileView(APIView):
 
 class RecommendationView(APIView):
     def get(self, request):
-        title = request.query_params.get("title", "Best hotels")
+        title = request.query_params.get("query", "Best hotels")
         amenities = request.query_params.get("amenities", "")
         city = request.query_params.get("city", "karachi")
         subcategories = request.query_params.get("subcategories", "Hotel")
-        place_type = request.query_params.get("place_type", "all")
+        place_type = request.query_params.get("place_type", "")
+        print('place_type', place_type)
+        queryset = Place.objects.filter(place_type=place_type) if place_type not in ["all", ""] else Place.objects.all()
 
-        queryset = Place.objects.all()
-        if place_type != "all":
-            queryset =  Place.objects.filter(place_type=place_type)
-
-    
         df = pd.DataFrame(list(queryset.values()))
-        recommendations = main(df, title, amenities, city, subcategories, place_type)
-        
-        return Response({'results': recommendations})
+        description, results = main(df, title, amenities, city, subcategories, place_type)
+
+        return Response({
+            'description': description, 
+            'results': results.to_dict(orient='records') if not results.empty else []
+        })
+
+
+
+class CollabrativeRecommendationView(APIView):
+    def get(self, request):
+        user = request.query_params.get("user", "")
+        if user:
+            recommended_places = recommend_places(user, Review, Place)
+
+            serializer = PlaceSerializer(recommended_places, many=True)
+            return Response({"results": serializer.data })
+        else:
+            return Response({"results": [] })

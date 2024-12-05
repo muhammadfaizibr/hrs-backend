@@ -95,14 +95,27 @@ class PlaceSerializer(serializers.ModelSerializer):
 
 
 
-class ReviewSerializer(serializers.ModelSerializer):
+class ReviewSerializerForList(serializers.ModelSerializer):
     class Meta:
         model = Review
-        fields = '__all_'
+        depth = 1
+        fields = '__all__'
+
+
+
+class ReviewSerializerForCreate(serializers.ModelSerializer):
+    class Meta:
+        model = Review
+        fields = '__all__'
+
+class ReviewSerializerForPost(serializers.ModelSerializer):
+    class Meta:
+        model = Review
+        fields = '__all__'
 
 class RecommendationSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=255)
     city = serializers.CharField(max_length=255)
     subcategories = serializers.CharField(max_length=255)
     class Meta:
-        fields = '__all_'
+        fields = '__all__'
