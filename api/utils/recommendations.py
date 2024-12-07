@@ -49,12 +49,13 @@ def get_recommendations(query_title, query_city, query_amenities,query_subcatego
     
     top_results = df.nlargest(10, 'final_score')
     if place_type == "hotel":
-        remaining = top_results.iloc[:][['place_type', 'name', 'id','city', 'image_url','address','subcategories', 'rating', 'ranking', 'combined_amenities']]
+        
+        remaining = top_results.iloc[:][['place_type', 'name', 'id','city', 'image_url','address','subcategories', 'number_of_reviews', 'rating', 'ranking', 'combined_amenities']]
     else:
-        remaining = top_results.iloc[:][['place_type', 'name', 'id','city', 'image_url','address','subcategories', 'rating', 'ranking']]
+        remaining = top_results.iloc[:][['place_type', 'name', 'id','city', 'image_url','address','subcategories', 'number_of_reviews','rating', 'ranking']]
 
     description = generate_description(llm, prompt, top_results.iloc[0], place_type) if not related else ""
-        # description = "lorem ipsum"
+    description = "lorem ipsum"
     return description, remaining
 
     

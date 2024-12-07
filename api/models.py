@@ -6,7 +6,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 import os
 from django.db.models.signals import pre_save
-import pickle
+from django.db.models.signals import post_delete
 
 class UserManager(BaseUserManager):
     def create_user(self, email, username, password=None, cofirm_password=None):
@@ -180,3 +180,16 @@ def update_place_rating(sender, instance, **kwargs):
     place.rating = new_rating
     place.number_of_reviews = total_reviews
     place.save()
+
+@receiver(post_delete, sender=Place)
+def perform_action_on_delete(sender, instance, **kwargs):
+    delete_all_files_in_folder("models")
+
+
+class Favourites(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    place = models.ForeignKey(Place, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"user {self.user.username} | place {self.place.name}"

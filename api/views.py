@@ -21,6 +21,11 @@ from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import models
 from rest_framework.filters import OrderingFilter
+from pyspark.sql import SparkSession
+from pyspark.ml.recommendation import ALS
+from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.sql.functions import col, explode
+from pyspark.ml.feature import StringIndexer
 
 
 
@@ -186,7 +191,7 @@ class RecommendationView(APIView):
 
         df = pd.DataFrame(list(queryset.values()))
         description, results = main(df, title, amenities, city, subcategories, place_type, related)
-        print(description)
+        # print(description)
         return Response({
             'description': description, 
             'results': results.to_dict(orient='records') if not results.empty else []
@@ -194,18 +199,132 @@ class RecommendationView(APIView):
 
 
 
-class CollabrativeRecommendationView(APIView):
-    def get(self, request):
-        user = request.query_params.get("user", "")
-        try:
-            if user:
-                user = User.objects.get(id=user) 
-                recommended_places = recommend_places(user, Review, Place)
 
-                serializer = PlaceSerializer(recommended_places, many=True)
-                return Response({"results": serializer.data })
-            else:
-                return Response({"results": [] })
+# class CollabrativeRecommendationView(APIView):
+#     # def get(self, request):
+#     #     user = request.query_params.get("user", "")
+#     #     try:
+#     #         if user:
+#     #             user = User.objects.get(id=user) 
+#     #             recommended_places = recommend_places(user, Review, Place)
+
+#     #             serializer = PlaceSerializer(recommended_places, many=True)
+#     #             return Response({"results": serializer.data })
+#     #         else:
+#     #             return Response({"results": [] })
             
-        except: 
-            return Response({"results": [] })
+#     #     except: 
+#     #         return Response({"results": [] })
+#     def post(self, request, *args, **kwargs):
+#         user = request.data.get('user')
+
+#         if not user:
+#             return Response({"error": "user is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+#         reviews = Review.objects.all().values('user', 'place', 'rating')
+
+#         df = pd.DataFrame(reviews)
+
+#         spark_df = spark.createDataFrame(df[['user', 'place', 'rating']])
+
+#         user_indexer = StringIndexer(inputCol="user", outputCol="user_index")
+#         place_indexer = StringIndexer(inputCol="place", outputCol="place_index")
+
+#         spark_df = user_indexer.fit(spark_df).transform(spark_df)
+#         spark_df = place_indexer.fit(spark_df).transform(spark_df)
+
+#         als = ALS(userCol="user_index", itemCol="place_index", ratingCol="rating", nonnegative=True, coldStartStrategy="drop")
+#         als_model = als.fit(spark_df)
+
+#         predictions = als_model.transform(spark_df)
+
+#         user_recs = als_model.recommendForUserSubset(spark_df.filter(spark_df.user_index == user), 5)
+
+#         user_recs = user_recs.withColumn("recommendations", explode("recommendations"))
+#         user_recs = user_recs.withColumn("place_index", col("recommendations.place_index"))
+#         user_recs = user_recs.withColumn("predicted_rating", col("recommendations.rating"))
+
+#         user_recs = user_recs.join(spark_df.select("place_index", "place").dropDuplicates(), on="place_index", how="left")
+
+#         recommended_places = user_recs.select("place", "predicted_rating").collect()
+
+#         places = Place.objects.filter(id__in=[place.place for place in recommended_places])
+#         place_data = [{"name": place.name, "address": place.address, "predicted_rating": place.predicted_rating} for place in places]
+
+#         return Response(place_data, status=status.HTTP_200_OK)
+
+
+class CollabrativeRecommendationView(APIView):
+
+    def get(self, request, user_id):
+        # Initialize Spark session
+        spark = SparkSession.builder.appName("CollaborativeFiltering").getOrCreate()
+
+        # Fetch data from the Review model
+        reviews = Review.objects.select_related('user', 'place').all().values(
+            'user__id', 'place__id', 'rating'
+        )
+        if not reviews:
+            return Response({"error": "No reviews found"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Convert the data to a Pandas DataFrame
+        df = pd.DataFrame(list(reviews))
+        df.rename(columns={'user__id': 'user', 'place__id': 'place', 'rating': 'predicted_rating'}, inplace=True)
+
+        # Convert the Pandas DataFrame to a Spark DataFrame
+        spark_df = spark.createDataFrame(df)
+
+        # Encode user and place IDs to integer IDs for Spark
+        user_indexer = StringIndexer(inputCol="user", outputCol="user_id")
+        place_indexer = StringIndexer(inputCol="place", outputCol="place_id")
+
+        spark_df = user_indexer.fit(spark_df).transform(spark_df)
+        spark_df = place_indexer.fit(spark_df).transform(spark_df)
+
+        # Build ALS model
+        als = ALS(userCol="user_id", itemCol="place_id", ratingCol="predicted_rating", nonnegative=True, coldStartStrategy="drop")
+        als_model = als.fit(spark_df)
+
+        # Make predictions
+        predictions = als_model.transform(spark_df)
+
+        # Evaluate the model
+        evaluator = RegressionEvaluator(metricName="rmse", labelCol="predicted_rating", predictionCol="prediction")
+        rmse = evaluator.evaluate(predictions)
+        print("Root Mean Squared Error (RMSE) for Collaborative Filtering: ", rmse)
+
+        # Generate recommendations for all users
+        user_recs = als_model.recommendForAllUsers(5)  # Top 5 recommendations for each user
+
+        # Filter recommendations for the specific user
+        user_index = spark_df.filter(col("user") == user_id).select("user_id").distinct().collect()
+        if not user_index:
+            return Response({"error": "User ID not found in the dataset"}, status=status.HTTP_404_NOT_FOUND)
+
+        user_id_encoded = user_index[0]["user_id"]
+        user_recs = user_recs.filter(col("user_id") == user_id_encoded)
+
+        if user_recs.count() == 0:
+            return Response({"error": "No recommendations found for this user"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Process recommendations
+        user_recs = user_recs.withColumn("recommendations", explode("recommendations"))
+        user_recs = user_recs.withColumn("place_id", col("recommendations.place_id"))
+        user_recs = user_recs.withColumn("predicted_rating", col("recommendations.rating"))
+
+        # Join with original data to get place names
+        user_recs = user_recs.join(
+            spark_df.select("place_id", "place").dropDuplicates(),
+            on="place_id",
+            how="left"
+        )
+
+        # Convert the results to a Pandas DataFrame
+        recommendations = user_recs.select("place", "predicted_rating").toPandas()
+
+        # Convert to a response-friendly format
+        recommendation_list = recommendations.to_dict(orient="records")
+
+        return Response(recommendation_list, status=status.HTTP_200_OK)
+        # return Response({}, status=status.HTTP_200_OK)
+    

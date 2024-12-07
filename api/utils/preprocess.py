@@ -41,7 +41,8 @@ def preprocess_data(dataset, place_type):
     return df
 
 def load_or_generate_tfidf_models(df, place_type):
-    models_dir = "models"
+    place_type = place_type if place_type else "all"
+    models_dir = "models/content-based"
     os.makedirs(models_dir, exist_ok=True)
     
     tfidf_title_path = os.path.join(models_dir, f"{place_type}_tfidf_title.pkl")

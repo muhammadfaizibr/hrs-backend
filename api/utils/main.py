@@ -22,7 +22,7 @@ def main(dataset, query_title, query_amenities,query_city, query_subcategories, 
 
     # else:
     #     human = ("{name} in {city}, located at {address}, is highly recommended for its subcategory of {subcategories}. With a rating of {rating}/5.0 and ranked {ranking}, it stands out as a must-visit destination. {description} This place is praised for its unique features, making it an excellent option for travelers. It offers amenities such as {amenities}, ensuring a comfortable and enjoyable stay.")
-    if place_type == "hotel":
+    if place_type == "attraction":
         human = ("{name} in {city}, at {address}, is highly recommended for its {subcategories}. Rated {rating}/5.0 and ranked {ranking}, it's a must-visit. {description} Praised for unique features, it's perfect for travelers seeking comfort.")
 
     else:

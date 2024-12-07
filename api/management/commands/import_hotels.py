@@ -52,10 +52,15 @@ def rename_columns(file_name):
     else:
         raise ValueError("Unsupported file type. Please provide a valid file.")
     
-    df.columns = df.columns.str.lower()  
+    df.columns = df.columns.str.lower() 
+    df['city'] = df['city'].str.lower()
+
+    df['review_count'] = 0
+    # df['rating'] = 0
+
     df.reset_index(drop=True, inplace=True)
     df['contact_phone'] = df['contact_phone'].replace('phone unknown', '')
-    df['contact_email'] = df['contact_email'].replace('phone unknown', '')
+    df['contact_email'] = df['contact_email'].replace('email unknown', '')
 
     return df
 
