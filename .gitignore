@@ -1,37 +1,33 @@
-# Ignore Django static files
+# Python bytecode files
+*.pyc
+*.pyo
+__pycache__/
+
+# Django migrations
+*/migrations/
+
+# Django database file
+db.sqlite3
+
+# Static files
 /static/
 
-# Ignore models directory
-/models/
-
-# Ignore SQLite database files
-db.sqlite3
-*.sqlite3
-
-# Ignore Python cache files
-__pycache__/
-*.py[cod]
-
-# Ignore environment files
-*.env
-
-# Ignore virtual environment directories
+# Virtual environment
 venv/
 env/
 
-# Ignore system-specific files
-.DS_Store
-Thumbs.db
-
-# Ignore compiled files and logs
-*.log
-*.pot
-*.pyc
-
-# Ignore migrations files if necessary (optional)
-/migrations/
-
-# Ignore IDE-specific files (optional)
+# IDE settings (for example, PyCharm, VSCode)
 .idea/
 .vscode/
-*.swp
+
+# Ignore entire models directory (if it contains large files such as trained models)
+models/
+
+# Local settings file (if it contains sensitive information)
+*.env
+
+# Logs
+*.log
+
+# Ignore CSV data files in the static/datasets folder
+static/datasets/*.csv
