@@ -8,7 +8,6 @@ import joblib
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 
-from pathlib import Path
 
 
 model_path = (settings.BASE_DIR) / 'models' / 'sentiment' / 'sentiment-trained-model.sav'

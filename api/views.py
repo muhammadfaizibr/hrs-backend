@@ -21,9 +21,13 @@ from django.db import models
 from rest_framework.filters import OrderingFilter
 from pyspark.sql import SparkSession
 from pyspark.ml.recommendation import ALS
-from pyspark.ml.evaluation import RegressionEvaluator
-from pyspark.sql.functions import col, explode
 from pyspark.ml.feature import StringIndexer
+# from pyspark.ml.evaluation import RegressionEvaluator
+from .models import Review, Place
+from pyspark.ml.recommendation import ALSModel
+import os
+from pathlib import Path
+from django.conf import settings
 
 
 
@@ -217,132 +221,357 @@ class RecommendationView(APIView):
 
 
 
+# Initialize Spark session
+# class CollaborativeRecommendationView(APIView):
+#     """
+#     API endpoint to generate collaborative filtering recommendations for a specific user.
+#     """
 
-# class CollabrativeRecommendationView(APIView):
-#     # def get(self, request):
-#     #     user = request.query_params.get("user", "")
-#     #     try:
-#     #         if user:
-#     #             user = User.objects.get(id=user) 
-#     #             recommended_places = recommend_places(user, Review, Place)
+#     def get(self, request, user_id, *args, **kwargs):
+#         try:
+#             # Check if the user exists
+#             if not User.objects.filter(id=user_id).exists():
+#                 return Response({"error": "User not found."}, status=404)
 
-#     #             serializer = PlaceSerializer(recommended_places, many=True)
-#     #             return Response({"results": serializer.data })
-#     #         else:
-#     #             return Response({"results": [] })
-            
-#     #     except: 
-#     #         return Response({"results": [] })
-#     def post(self, request, *args, **kwargs):
-#         user = request.data.get('user')
+#             # Initialize Spark session
+#             spark = SparkSession.builder.master("local[*]").appName("CollaborativeFiltering").getOrCreate()
 
-#         if not user:
-#             return Response({"error": "user is required"}, status=status.HTTP_400_BAD_REQUEST)
+#             # Load review data
+#             reviews = Review.objects.select_related("user", "place").values(
+#                 "user__id", "place__id", "place__name", "rating"
+#             )
+#             df = pd.DataFrame(reviews)
 
-#         reviews = Review.objects.all().values('user', 'place', 'rating')
+#             # Check if review data is available
+#             if df.empty:
+#                 return Response({"message": "No reviews available to generate recommendations."}, status=200)
 
-#         df = pd.DataFrame(reviews)
+#             # Rename columns to match expected schema
+#             df.columns = ["user_id", "place_id", "place_name", "rating"]
 
-#         spark_df = spark.createDataFrame(df[['user', 'place', 'rating']])
+#             # Convert Pandas DataFrame to Spark DataFrame
+#             spark_df = spark.createDataFrame(df)
 
-#         user_indexer = StringIndexer(inputCol="user", outputCol="user_index")
-#         place_indexer = StringIndexer(inputCol="place", outputCol="place_index")
+#             # Index user IDs and place names to numerical IDs
+#             user_indexer = StringIndexer(inputCol="user_id", outputCol="user_index").fit(spark_df)
+#             place_indexer = StringIndexer(inputCol="place_name", outputCol="place_index").fit(spark_df)
 
-#         spark_df = user_indexer.fit(spark_df).transform(spark_df)
-#         spark_df = place_indexer.fit(spark_df).transform(spark_df)
+#             spark_df = user_indexer.transform(spark_df)
+#             spark_df = place_indexer.transform(spark_df)
 
-#         als = ALS(userCol="user_index", itemCol="place_index", ratingCol="rating", nonnegative=True, coldStartStrategy="drop")
-#         als_model = als.fit(spark_df)
+#             # Train the ALS model
+#             als = ALS(
+#                 userCol="user_index",
+#                 itemCol="place_index",
+#                 ratingCol="rating",
+#                 nonnegative=True,
+#                 coldStartStrategy="drop",
+#             )
+#             als_model = als.fit(spark_df)
 
-#         predictions = als_model.transform(spark_df)
+#             # Map user_id to user_index
+#             user_mapping = (
+#                 spark_df.select("user_id", "user_index")
+#                 .distinct()
+#                 .toPandas()
+#                 .set_index("user_id")["user_index"]
+#                 .to_dict()
+#             )
 
-#         user_recs = als_model.recommendForUserSubset(spark_df.filter(spark_df.user_index == user), 5)
+#             if user_id not in user_mapping:
+#                 return Response(
+#                     {"message": f"No sufficient data to generate recommendations for user_id={user_id}."},
+#                     status=200,
+#                 )
 
-#         user_recs = user_recs.withColumn("recommendations", explode("recommendations"))
-#         user_recs = user_recs.withColumn("place_index", col("recommendations.place_index"))
-#         user_recs = user_recs.withColumn("predicted_rating", col("recommendations.rating"))
+#             user_index = user_mapping[user_id]
 
-#         user_recs = user_recs.join(spark_df.select("place_index", "place").dropDuplicates(), on="place_index", how="left")
+#             # Generate recommendations for the user
+#             user_recs = als_model.recommendForUserSubset(
+#                 spark_df.filter(spark_df.user_index == user_index), 5
+#             ).toPandas()
 
-#         recommended_places = user_recs.select("place", "predicted_rating").collect()
+#             if user_recs.empty:
+#                 return Response(
+#                     {"message": f"No recommendations found for user_id={user_id}."},
+#                     status=200,
+#                 )
 
-#         places = Place.objects.filter(id__in=[place.place for place in recommended_places])
-#         place_data = [{"name": place.name, "address": place.address, "predicted_rating": place.predicted_rating} for place in places]
+#             # Process recommendations
+#             user_recs["recommendations"] = user_recs["recommendations"].apply(
+#                 lambda recs: [{"place_index": rec[0], "rating": rec[1]} for rec in recs]
+#             )
 
-#         return Response(place_data, status=status.HTTP_200_OK)
+#             # Map place indices to place details
+#             place_mapping = (
+#                 spark_df.select("place_index", "place_id")
+#                 .distinct()
+#                 .toPandas()
+#                 .set_index("place_index")["place_id"]
+#                 .to_dict()
+#             )
+
+#             recommendations = []
+#             for rec in user_recs["recommendations"].iloc[0]:
+#                 place_id = place_mapping.get(rec["place_index"])
+#                 if place_id:
+#                     # Fetch full place details from the database
+#                     place = Place.objects.filter(id=place_id).values().first()
+#                     if place:
+#                         # place["rating"] = rec["rating"]  # Append recommendation rating
+#                         recommendations.append(place)
+
+#             # Prepare response
+#             response_data = {
+#                 "user_id": user_id,
+#                 "recommendations": recommendations,
+#             }
+
+#             return Response(response_data, status=200)
+
+#         except Exception as e:
+#             return Response({"error": str(e)}, status=500)
 
 
-class CollabrativeRecommendationView(APIView):
+# class CollaborativeRecommendationView(APIView):
+#     """
+#     Optimized API endpoint to generate collaborative filtering recommendations for a specific user.
+#     """
 
-    def get(self, request, user_id):
-        # Initialize Spark session
-        spark = SparkSession.builder.appName("CollaborativeFiltering").getOrCreate()
+#     def get(self, request, user_id, *args, **kwargs):
+#         try:
+#             # Check if the user exists
+#             if not User.objects.filter(id=user_id).exists():
+#                 return Response({"error": "User not found."}, status=404)
 
-        # Fetch data from the Review model
-        reviews = Review.objects.select_related('user', 'place').all().values(
-            'user__id', 'place__id', 'rating'
-        )
-        if not reviews:
-            return Response({"error": "No reviews found"}, status=status.HTTP_400_BAD_REQUEST)
+#             # Load review data
+#             reviews = Review.objects.select_related("user", "place").values(
+#                 "user__id", "place__id", "rating"
+#             )
 
-        # Convert the data to a Pandas DataFrame
-        df = pd.DataFrame(list(reviews))
-        df.rename(columns={'user__id': 'user', 'place__id': 'place', 'rating': 'predicted_rating'}, inplace=True)
+#             df = pd.DataFrame(reviews)
 
-        # Convert the Pandas DataFrame to a Spark DataFrame
-        spark_df = spark.createDataFrame(df)
+#             # Check if review data is available
+#             if df.empty:
+#                 return Response({"message": "No reviews available to generate recommendations."}, status=200)
 
-        # Encode user and place IDs to integer IDs for Spark
-        user_indexer = StringIndexer(inputCol="user", outputCol="user_id")
-        place_indexer = StringIndexer(inputCol="place", outputCol="place_id")
+#             # Initialize Spark session
+#             spark = SparkSession.builder.master("local[*]").appName("CollaborativeFiltering").getOrCreate()
 
-        spark_df = user_indexer.fit(spark_df).transform(spark_df)
-        spark_df = place_indexer.fit(spark_df).transform(spark_df)
+#             # Convert Pandas DataFrame to Spark DataFrame
+#             spark_df = spark.createDataFrame(df)
 
-        # Build ALS model
-        als = ALS(userCol="user_id", itemCol="place_id", ratingCol="predicted_rating", nonnegative=True, coldStartStrategy="drop")
-        als_model = als.fit(spark_df)
+#             # Index user IDs and place IDs to numerical IDs
+#             user_indexer = StringIndexer(inputCol="user__id", outputCol="user_index").fit(spark_df)
+#             place_indexer = StringIndexer(inputCol="place__id", outputCol="place_index").fit(spark_df)
 
-        # Make predictions
-        predictions = als_model.transform(spark_df)
+#             spark_df = user_indexer.transform(spark_df)
+#             spark_df = place_indexer.transform(spark_df)
 
-        # Evaluate the model
-        evaluator = RegressionEvaluator(metricName="rmse", labelCol="predicted_rating", predictionCol="prediction")
-        rmse = evaluator.evaluate(predictions)
-        print("Root Mean Squared Error (RMSE) for Collaborative Filtering: ", rmse)
+#             # Train the ALS model
+#             als = ALS(
+#                 userCol="user_index",
+#                 itemCol="place_index",
+#                 ratingCol="rating",
+#                 nonnegative=True,
+#                 coldStartStrategy="drop",
+#             )
+#             als_model = als.fit(spark_df)
 
-        # Generate recommendations for all users
-        user_recs = als_model.recommendForAllUsers(5)  # Top 5 recommendations for each user
+#             # Map user_id to user_index
+#             user_mapping = (
+#                 spark_df.select("user__id", "user_index")
+#                 .distinct()
+#                 .toPandas()
+#                 .set_index("user__id")["user_index"]
+#                 .to_dict()
+#             )
 
-        # Filter recommendations for the specific user
-        user_index = spark_df.filter(col("user") == user_id).select("user_id").distinct().collect()
-        if not user_index:
-            return Response({"error": "User ID not found in the dataset"}, status=status.HTTP_404_NOT_FOUND)
+#             if user_id not in user_mapping:
+#                 return Response(
+#                     {"message": f"No sufficient data to generate recommendations for user_id={user_id}."},
+#                     status=200,
+#                 )
 
-        user_id_encoded = user_index[0]["user_id"]
-        user_recs = user_recs.filter(col("user_id") == user_id_encoded)
+#             user_index = user_mapping[user_id]
 
-        if user_recs.count() == 0:
-            return Response({"error": "No recommendations found for this user"}, status=status.HTTP_404_NOT_FOUND)
+#             # Generate recommendations for the user
+#             user_recs = als_model.recommendForUserSubset(
+#                 spark_df.filter(spark_df.user_index == user_index), 5
+#             ).toPandas()
 
-        # Process recommendations
-        user_recs = user_recs.withColumn("recommendations", explode("recommendations"))
-        user_recs = user_recs.withColumn("place_id", col("recommendations.place_id"))
-        user_recs = user_recs.withColumn("predicted_rating", col("recommendations.rating"))
+#             if user_recs.empty:
+#                 return Response(
+#                     {"message": f"No recommendations found for user_id={user_id}."},
+#                     status=200,
+#                 )
 
-        # Join with original data to get place names
-        user_recs = user_recs.join(
-            spark_df.select("place_id", "place").dropDuplicates(),
-            on="place_id",
-            how="left"
-        )
+#             # Extract recommended place indices
+#             user_recs["recommendations"] = user_recs["recommendations"].apply(
+#                 lambda recs: [{"place_index": rec[0], "rating": rec[1]} for rec in recs]
+#             )
+#             place_indices = [rec["place_index"] for rec in user_recs["recommendations"].iloc[0]]
 
-        # Convert the results to a Pandas DataFrame
-        recommendations = user_recs.select("place", "predicted_rating").toPandas()
+#             # Map place indices to place IDs
+#             place_mapping = (
+#                 spark_df.select("place_index", "place__id")
+#                 .distinct()
+#                 .toPandas()
+#                 .set_index("place_index")["place__id"]
+#                 .to_dict()
+#             )
 
-        # Convert to a response-friendly format
-        recommendation_list = recommendations.to_dict(orient="records")
+#             # Fetch all recommended place details in a single query
+#             place_ids = [place_mapping.get(index) for index in place_indices]
+#             places = Place.objects.filter(id__in=place_ids).values()
 
-        return Response(recommendation_list, status=status.HTTP_200_OK)
-        # return Response({}, status=status.HTTP_200_OK)
-    
+#             # Create a dictionary for fast lookup of place details
+#             places_dict = {place["id"]: place for place in places}
+
+#             # Prepare recommendations
+#             recommendations = []
+#             for rec in user_recs["recommendations"].iloc[0]:
+#                 place_id = place_mapping.get(rec["place_index"])
+#                 if place_id and place_id in places_dict:
+#                     place = places_dict[place_id]
+#                     # Append recommendation rating
+#                     place["rating"] = rec["rating"]
+#                     recommendations.append(place)
+
+#             # Prepare response
+#             response_data = {
+#                 "user_id": user_id,
+#                 "recommendations": recommendations,
+#             }
+
+#             return Response(response_data, status=200)
+
+#         except Exception as e:
+#             return Response({"error": str(e)}, status=500)
+
+
+class CollaborativeRecommendationView(APIView):
+    """
+    Optimized API endpoint with model persistence for collaborative filtering recommendations.
+    """
+
+    MODEL_PATH = str(Path(settings.BASE_DIR) / "models" / "als_model")
+    print(MODEL_PATH,'MODEL_PATH')
+
+    def get(self, request, user_id, *args, **kwargs):
+        try:
+            # Check if the user exists
+            if not User.objects.filter(id=user_id).exists():
+                return Response({"error": "User not found."}, status=404)
+
+            # Load review data
+            reviews = Review.objects.select_related("user", "place").values(
+                "user__id", "place__id", "rating"
+            )
+            df = pd.DataFrame(reviews)
+
+            # Check if review data is available
+            if df.empty:
+                return Response({"message": "No reviews available to generate recommendations."}, status=200)
+
+            # Initialize Spark session
+            spark = SparkSession.builder.master("local[*]").appName("CollaborativeFiltering").getOrCreate()
+
+            # Convert Pandas DataFrame to Spark DataFrame
+            spark_df = spark.createDataFrame(df)
+
+            # Index user IDs and place IDs to numerical IDs
+            user_indexer = StringIndexer(inputCol="user__id", outputCol="user_index").fit(spark_df)
+            place_indexer = StringIndexer(inputCol="place__id", outputCol="place_index").fit(spark_df)
+
+            spark_df = user_indexer.transform(spark_df)
+            spark_df = place_indexer.transform(spark_df)
+
+            # Check if the model exists
+            if os.path.exists(self.MODEL_PATH):
+                # Load the existing ALS model
+                als_model = ALSModel.load(self.MODEL_PATH)
+            else:
+                # Train a new ALS model
+                als = ALS(
+                    userCol="user_index",
+                    itemCol="place_index",
+                    ratingCol="rating",
+                    nonnegative=True,
+                    coldStartStrategy="drop",
+                )
+                als_model = als.fit(spark_df)
+
+                # Save the model for future use
+                als_model.save(self.MODEL_PATH)
+
+            # Map user_id to user_index
+            user_mapping = (
+                spark_df.select("user__id", "user_index")
+                .distinct()
+                .toPandas()
+                .set_index("user__id")["user_index"]
+                .to_dict()
+            )
+
+            if user_id not in user_mapping:
+                return Response(
+                    {"message": f"No sufficient data to generate recommendations for user_id={user_id}."},
+                    status=200,
+                )
+
+            user_index = user_mapping[user_id]
+
+            # Generate recommendations for the user
+            user_recs = als_model.recommendForUserSubset(
+                spark_df.filter(spark_df.user_index == user_index), 10
+            ).toPandas()
+
+            if user_recs.empty:
+                return Response(
+                    {"message": f"No recommendations found for user_id={user_id}."},
+                    status=200,
+                )
+
+            # Extract recommended place indices
+            user_recs["recommendations"] = user_recs["recommendations"].apply(
+                lambda recs: [{"place_index": rec[0], "rating": rec[1]} for rec in recs]
+            )
+            place_indices = [rec["place_index"] for rec in user_recs["recommendations"].iloc[0]]
+
+            # Map place indices to place IDs
+            place_mapping = (
+                spark_df.select("place_index", "place__id")
+                .distinct()
+                .toPandas()
+                .set_index("place_index")["place__id"]
+                .to_dict()
+            )
+
+            # Fetch all recommended place details in a single query
+            place_ids = [place_mapping.get(index) for index in place_indices]
+            places = Place.objects.filter(id__in=place_ids).values()
+
+            # Create a dictionary for fast lookup of place details
+            places_dict = {place["id"]: place for place in places}
+
+            # Prepare recommendations
+            recommendations = []
+            for rec in user_recs["recommendations"].iloc[0]:
+                place_id = place_mapping.get(rec["place_index"])
+                if place_id and place_id in places_dict:
+                    place = places_dict[place_id]
+                    # Append recommendation rating
+                    # place["rating"] = rec["rating"]
+                    recommendations.append(place)
+
+            # Prepare response
+            response_data = {
+                "user_id": user_id,
+                "results": recommendations,
+            }
+
+            return Response(response_data, status=200)
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)

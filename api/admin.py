@@ -13,7 +13,7 @@ class UserModelAdmin(UserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'username','password', 'confirm_password'),
+            'fields': ('email', 'username','password'),
         }),
     )
     search_fields = ('email', 'username',)

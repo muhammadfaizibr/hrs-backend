@@ -7,6 +7,11 @@ from django.dispatch import receiver
 import os
 from django.db.models.signals import pre_save
 from django.db.models.signals import post_delete
+import joblib
+from nltk.stem import PorterStemmer
+from nltk.tokenize import word_tokenize
+from django.conf import settings
+from pathlib import Path
 
 class UserManager(BaseUserManager):
     def create_user(self, email, username, password=None, cofirm_password=None):
@@ -165,7 +170,34 @@ def place_post_save(sender, instance, created, **kwargs):
         delete_all_files_in_folder("models")
 
 
-@receiver(post_save, sender=Review)
+
+model_path = (settings.BASE_DIR) / 'models' / 'sentiment' / 'sentiment-trained-model.sav'
+vectorizer_path = (settings.BASE_DIR) / 'models' / 'sentiment' / 'tfidf-vectorizer.sav'
+
+stemmer = PorterStemmer()
+
+
+def preprocess_text(text):
+
+    tokens = word_tokenize(text)
+    stemmed = [stemmer.stem(token) for token in tokens]
+    return ' '.join(stemmed)
+
+
+
+def analyze_sentiment(review_text):
+    reviews = []
+    reviews.append(review_text)
+    loaded_model = joblib.load(model_path)
+    loaded_vectorizer = joblib.load(vectorizer_path)
+    preprocessed_reviews = [preprocess_text(comment) for comment in reviews]
+    transformed_reviews = loaded_vectorizer.transform(preprocessed_reviews)
+    predictions = loaded_model.predict(transformed_reviews)
+    
+    return "positive" if predictions[0] == 2 else "negative" if predictions[0] == 0 else "neutral"
+
+
+@receiver(pre_save, sender=Review)
 def update_place_rating(sender, instance, **kwargs):
     # # filename='sentiment-trained-model.sav'
     # # loaded_model=pickle.load(open('sentiment-trained-model.sav','rb'))
@@ -175,11 +207,13 @@ def update_place_rating(sender, instance, **kwargs):
     place = instance.place
 
     total_reviews = place.number_of_reviews + 1
-    new_rating = ((place.rating * place.number_of_reviews) + instance.rating) / total_reviews
-
+    new_rating = ((place.rating * (place.number_of_reviews if place.number_of_reviews != 0 else 1 ) ) + instance.rating) / total_reviews
+    
     place.rating = new_rating
     place.number_of_reviews = total_reviews
     place.save()
+
+    instance.sentiment = analyze_sentiment(instance.review_text)
 
 @receiver(post_delete, sender=Place)
 def perform_action_on_delete(sender, instance, **kwargs):
