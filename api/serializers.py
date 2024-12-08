@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from api.models import User, Place, Review
+from api.models import User, Place, Review, Favourite
 from django.contrib.auth import authenticate
 import re
 
@@ -107,6 +107,17 @@ class ReviewSerializerForCreate(serializers.ModelSerializer):
     class Meta:
         model = Review
         fields = '__all__'
+
+class FavouriteSerializer(serializers.ModelSerializer):
+    def __init__(self, *args, **kwargs):
+        depth = kwargs.pop('depth', 0)
+        super().__init__(*args, **kwargs)
+        self.Meta.depth = depth
+
+    class Meta:
+        model = Favourite
+        fields = '__all__'
+
 
 class ReviewSerializerForPost(serializers.ModelSerializer):
     class Meta:

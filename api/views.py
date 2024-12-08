@@ -1,21 +1,19 @@
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.views import APIView
-from api.serializers import UserSerializer, UserRegistrationSerializer, UserLoginSerializer, UserProfileSerializer, PlaceSerializer, ReviewSerializerForList, ReviewSerializerForCreate, RecommendationSerializer
-from api.models import User, Place, Review
+from api.serializers import UserRegistrationSerializer, UserLoginSerializer, UserProfileSerializer, PlaceSerializer, ReviewSerializerForList, ReviewSerializerForCreate, RecommendationSerializer, FavouriteSerializer
+from api.models import User, Place, Review, Favourite
 from django.contrib.auth import authenticate
 from api.renderers import CustomRenderer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import pagination
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.response import Response
 from api.utils.main import main
-from api.utils.collaborative_filtering import recommend_places
+# from api.utils.collaborative_filtering import recommend_places
 import pandas as pd
 from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
@@ -137,7 +135,20 @@ class PlaceRetrieveUpdateDestroyView(RetrieveUpdateDestroyAPIView):
     serializer_class = PlaceSerializer
     queryset = Place.objects.all().order_by('-id')
 
-    
+class FavouriteView(ListCreateAPIView):
+    # renderer_classes = [CustomRenderer]
+    queryset = Favourite.objects.all().order_by('-id')
+    filterset_fields = ['user', 'place']
+    filter_backends = [DjangoFilterBackend]
+
+    def get_serializer(self, *args, **kwargs):
+        if self.request.method == 'GET':
+            kwargs['depth'] = 1
+        elif self.request.method == 'POST':
+            kwargs['depth'] = 0
+        return FavouriteSerializer(*args, **kwargs)
+
+
 class ReviewListView(ListCreateAPIView):
     renderer_classes = [CustomRenderer]
     serializer_class = ReviewSerializerForList
@@ -191,10 +202,17 @@ class RecommendationView(APIView):
 
         df = pd.DataFrame(list(queryset.values()))
         description, results = main(df, title, amenities, city, subcategories, place_type, related)
+        results = results.to_dict(orient='records') if not results.empty else []
+
+        description_with_title = [
+            {'title': results[index]['name'], 'description': description[index]} for element, index in enumerate(range(len(description)))
+        ]
+        print(description_with_title)
+
         # print(description)
         return Response({
-            'description': description, 
-            'results': results.to_dict(orient='records') if not results.empty else []
+            'description': description_with_title, 
+            'results': results
         })
 
 

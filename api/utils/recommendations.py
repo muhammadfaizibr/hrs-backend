@@ -54,8 +54,9 @@ def get_recommendations(query_title, query_city, query_amenities,query_subcatego
     else:
         remaining = top_results.iloc[:][['place_type', 'name', 'id','city', 'image_url','address','subcategories', 'number_of_reviews','rating', 'ranking']]
 
-    description = generate_description(llm, prompt, top_results.iloc[0], place_type) if not related else ""
-    description = "lorem ipsum"
+    description = generate_description(llm, prompt, top_results.iloc[0:3], place_type) if not related else ""
+    # print(description)
+    # description = ["a", "b", "c"]
     return description, remaining
 
     

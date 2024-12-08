@@ -1,5 +1,5 @@
 from django.contrib import admin
-from api.models import User, Place, Review
+from api.models import User, Place, Review, Favourite
 from django.contrib.auth.admin import UserAdmin
 
 class UserModelAdmin(UserAdmin):
@@ -21,6 +21,6 @@ class UserModelAdmin(UserAdmin):
     filter_horizontal = ()
 
 admin.site.register(User, UserModelAdmin)
-admin.site.register(Place)
-admin.site.register(Review)
+admin.site.register([Place, Review, Favourite])
+
 

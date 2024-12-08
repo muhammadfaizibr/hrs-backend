@@ -186,10 +186,13 @@ def perform_action_on_delete(sender, instance, **kwargs):
     delete_all_files_in_folder("models")
 
 
-class Favourites(models.Model):
+class Favourite(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     place = models.ForeignKey(Place, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
         return f"user {self.user.username} | place {self.place.name}"
+
+    class Meta:
+        unique_together = ('user', 'place')

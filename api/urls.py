@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from django.conf.urls.static import static
 from django.conf import settings
-from api.views import PlaceListCreateView, PlaceRetrieveUpdateDestroyView, ReviewListView, ReviewCreateView, ReviewRetrieveUpdateDestroyView, RecommendationView, CollabrativeRecommendationView
+from api.views import PlaceListCreateView, PlaceRetrieveUpdateDestroyView, ReviewListView, ReviewCreateView, ReviewRetrieveUpdateDestroyView, RecommendationView, CollabrativeRecommendationView, FavouriteView
 
 router = DefaultRouter()
 
@@ -12,6 +12,7 @@ router = DefaultRouter()
 
 urlpatterns = [
     path('recommendations/', RecommendationView.as_view(), name='recommendations'),
+    path('favourite/', FavouriteView.as_view(), name='favourite'),
     path('place-list-create/', PlaceListCreateView.as_view()),
     path('place-retrieve-update-destroy/<int:pk>/', PlaceRetrieveUpdateDestroyView.as_view()),
     path('review-list/', ReviewListView.as_view()),
